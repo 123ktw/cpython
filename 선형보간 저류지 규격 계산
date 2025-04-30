@@ -1,0 +1,100 @@
+import pandas as pd
+import io
+
+# Provided data from the table for slope 1:3 (토사)
+data_text = """
+A,WQv,D,B1,L1,H,B,L
+6000,30,0.9,1.0,6.0,1.5,10.0,15.0
+8000,40,1.0,1.0,6.3,1.6,10.6,15.9
+10000,50,1.0,1.3,6.8,1.6,10.9,16.4
+12000,60,1.1,1.2,6.9,1.7,11.4,17.1
+14000,70,1.1,1.6,7.5,1.7,11.8,17.7
+16000,80,1.2,1.4,7.5,1.8,12.2,18.3
+18000,90,1.3,1.0,7.7,1.9,12.4,18.6
+20000,100,1.4,1.0,7.5,2.0,13.0,19.5
+"""
+
+# Read the data into a pandas DataFrame
+df = pd.read_csv(io.StringIO(data_text))
+
+def calculate_dimensions_1_3(watershed_area):
+    """
+    Calculates detention basin dimensions for a given watershed area
+    using linear interpolation based on the provided table (slope 1:3).
+
+    Args:
+        watershed_area (float): The watershed area in m^2.
+
+    Returns:
+        dict: A dictionary containing the calculated dimensions
+              (D, B1, L1, H, B, L) or None if the area is out of range.
+    """
+    min_area = df['A'].min()
+    max_area = df['A'].max()
+
+    if not (min_area <= watershed_area <= max_area):
+        print(f"경고: 유역면적 {watershed_area} m²는 규격표 범위 ({min_area}~{max_area} m²) 밖에 있습니다.")
+        # Handle out-of-range: return dimensions for the closest boundary
+        if watershed_area < min_area:
+             print(f"{min_area} m²의 규격을 반환합니다.")
+             return df[df['A'] == min_area][['D', 'B1', 'L1', 'H', 'B', 'L']].iloc[0].to_dict()
+        else: # watershed_area > max_area
+             print(f"{max_area} m²의 규격을 반환합니다.")
+             return df[df['A'] == max_area][['D', 'B1', 'L1', 'H', 'B', 'L']].iloc[0].to_dict()
+
+
+    # Check if the area exactly matches a value in the table
+    exact_match = df[df['A'] == watershed_area]
+    if not exact_match.empty:
+        return exact_match[['D', 'B1', 'L1', 'H', 'B', 'L']].iloc[0].to_dict()
+
+    # Find the interval [A_i, A_{i+1}] for interpolation
+    lower = df[df['A'] < watershed_area].iloc[-1]
+    upper = df[df['A'] > watershed_area].iloc[0]
+
+    A_i = lower['A']
+    A_i_plus_1 = upper['A']
+
+    # Perform linear interpolation for each dimension
+    calculated_dims = {}
+    dimensions_to_interpolate = ['D', 'B1', 'L1', 'H', 'B', 'L']
+
+    for dim in dimensions_to_interpolate:
+        Dim_i = lower[dim]
+        Dim_i_plus_1 = upper[dim]
+        # Interpolation formula
+        interpolated_value = Dim_i + (Dim_i_plus_1 - Dim_i) * (watershed_area - A_i) / (A_i_plus_1 - A_i)
+        calculated_dims[dim] = round(interpolated_value, 2) # Round to 2 decimal places
+
+    return calculated_dims
+
+# --- Example Usage ---
+# Example 1: The case from the previous request
+area_example_1 = 13000
+dimensions_1 = calculate_dimensions_1_3(area_example_1)
+print(f"\n유역면적 {area_example_1} m² 에 대한 계산된 규격 (선형 보간):")
+print(dimensions_1)
+
+# Example 2: An area that exactly matches the table
+area_example_2 = 10000
+dimensions_2 = calculate_dimensions_1_3(area_example_2)
+print(f"\n유역면적 {area_example_2} m² 에 대한 계산된 규격 (표 값):")
+print(dimensions_2)
+
+# Example 3: Another intermediate area
+area_example_3 = 9500
+dimensions_3 = calculate_dimensions_1_3(area_example_3)
+print(f"\n유역면적 {area_example_3} m² 에 대한 계산된 규격 (선형 보간):")
+print(dimensions_3)
+
+# Example 4: Out of range (below)
+area_example_4 = 5000
+dimensions_4 = calculate_dimensions_1_3(area_example_4)
+print(f"\n유역면적 {area_example_4} m² 에 대한 규격:")
+print(dimensions_4)
+
+# Example 5: Out of range (above)
+area_example_5 = 22000
+dimensions_5 = calculate_dimensions_1_3(area_example_5)
+print(f"\n유역면적 {area_example_5} m² 에 대한 규격:")
+print(dimensions_5)
